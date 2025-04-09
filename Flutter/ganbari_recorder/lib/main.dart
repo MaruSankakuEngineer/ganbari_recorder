@@ -10,6 +10,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
   tz.setLocalLocation(tz.getLocation('Asia/Tokyo'));
+  
+  final notificationService = NotificationService();
+  notificationService.onRecordAdded = () {};
   await NotificationService().init();
   runApp(MyApp());
 }
@@ -123,6 +126,10 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
@@ -140,17 +147,16 @@ class NotificationService {
       onDidReceiveNotificationResponse: (details) {
         final actionId = details.actionId;
 
-        if (actionId == 'yes_action') {
-          _saveRecord('勝ち');
-        } else if (actionId == 'no_action') {
-          _saveRecord('負け');
-        } else {
-          print("🔔 通知がタップされました");
+        if (details.notificationResponseType == NotificationResponseType.selectedNotificationAction) {
+          if (actionId == 'yes_action') {
+            _saveRecord('勝ち');
+          } else if (actionId == 'no_action') {
+            _saveRecord('負け');
+          }
         }
       },
     );
     scheduleDailyNotification();
-
     await requestExactAlarmPermission();
   }
 
@@ -212,9 +218,17 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       actions: [
-        AndroidNotificationAction('yes_action', 'Yes'),
-        AndroidNotificationAction('no_action', 'No'),
-      ],
+      AndroidNotificationAction(
+        'yes_action',
+        'Yes',
+        showsUserInterface: true,
+      ),
+      AndroidNotificationAction(
+        'no_action',
+        'No',
+        showsUserInterface: true,
+      ),
+    ],
     );
 
     const NotificationDetails details = NotificationDetails(android: androidDetails);
