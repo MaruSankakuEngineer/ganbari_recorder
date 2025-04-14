@@ -12,7 +12,6 @@ void main() async {
   tz.setLocalLocation(tz.getLocation('Asia/Tokyo'));
   
   final notificationService = NotificationService();
-  notificationService.onRecordAdded = () {};
   await NotificationService().init();
   runApp(MyApp());
 }
@@ -39,9 +38,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadRecords();
-    NotificationService().onRecordAdded = () {
-      _loadRecords();
+
+    NotificationService().onRecordAdded = (String result) {
+      _addRecord(result);
     };
+
     NotificationService().scheduleDailyNotification();
   }
 
@@ -133,7 +134,7 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  VoidCallback? onRecordAdded;
+  void Function(String result)? onRecordAdded;
 
   Future<void> init() async {
     const AndroidInitializationSettings androidInitSettings =
@@ -179,11 +180,16 @@ class NotificationService {
 
   String getRandomMessage() {
     final messages = [
-      '今日はどんな1日だった？',
+      '今日、やるべきことに取り組めた？',
+      '少しでも前に進めたって感じた？',
       '何か一歩進めた？',
-      '自分に拍手したいことは？',
-      'ちゃんと休めた？',
-      '今日もお疲れさま！',
+      '自分との約束を守れた？',
+      '昨日よりちょっとだけ成長できた？',
+      '今日の自分を褒められる？',
+      '一日を自分らしく過ごせた？',
+      '小さな達成感、味わえた？',
+      '今日は「やりきった」って思えた？',
+      '今の自分にできることをやった？'
     ];
     messages.shuffle();
     return messages.first;
@@ -255,6 +261,6 @@ class NotificationService {
     String date = DateTime.now().toIso8601String().split('T')[0];
     records.add("記録日: $date - $response");
     await prefs.setStringList('records', records);
-    onRecordAdded?.call();
+    onRecordAdded?.call(response);
   }
 }
