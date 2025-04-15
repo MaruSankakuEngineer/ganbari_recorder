@@ -59,6 +59,18 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _deleteRecord(int index) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> records = prefs.getStringList('records') ?? [];
+    if (index >= 0 && index < records.length) {
+      records.removeAt(index);
+      await prefs.setStringList('records', records);
+      setState(() {
+        this.records = records;
+      });
+    }
+  }
+
   void _addRecord(String result) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> records = prefs.getStringList('records') ?? [];
@@ -98,7 +110,13 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ListView.builder(
               itemCount: records.length,
               itemBuilder: (context, index) {
-                return ListTile(title: Text(records[index]));
+                return ListTile(
+                  title: Text(records[index]),
+                  trailing: IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => _deleteRecord(index),
+                  ),
+                );
               },
             ),
           ),
@@ -259,6 +277,7 @@ class NotificationService {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> records = prefs.getStringList('records') ?? [];
     String date = DateTime.now().toIso8601String().split('T')[0];
+    records.removeWhere((record) => record.startsWith("記録日: $date -"));
     records.add("記録日: $date - $response");
     await prefs.setStringList('records', records);
     onRecordAdded?.call(response);
