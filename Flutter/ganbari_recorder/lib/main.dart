@@ -124,7 +124,34 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
             },
+            calendarBuilders: CalendarBuilders(
+              defaultBuilder: (context, day, focusedDay) {
+                final dateKey = day.toIso8601String().split('T')[0];
+                final result = recordMap[dateKey];
+
+                if (result != null) {
+                  String emoji = result == '勝ち' ? '🟢' : '🔴';
+
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${day.day}',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                      Text(
+                        emoji,
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ],
+                  );
+                }
+
+                return null; // 通常通り描画
+              },
+            ),
           ),
+
           SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
