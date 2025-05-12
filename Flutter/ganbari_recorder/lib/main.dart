@@ -4,15 +4,15 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'dart:io';
+import 'package:table_calendar/table_calendar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
   tz.setLocalLocation(tz.getLocation('Asia/Tokyo'));
-  
+
   final notificationService = NotificationService();
-  await NotificationService().init();
+  await notificationService.init();
   runApp(MyApp());
 }
 
@@ -32,7 +32,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<String> records = [];
+  Map<String, String> recordMap = {};
+  DateTime focusedDay = DateTime.now();
 
   @override
   void initState() {
@@ -46,58 +47,48 @@ class _HomeScreenState extends State<HomeScreen> {
     NotificationService().scheduleDailyNotification();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _loadRecords();
-  }
-
   void _loadRecords() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      records = prefs.getStringList('records') ?? [];
-    });
-  }
-
-  void _deleteRecord(int index) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> records = prefs.getStringList('records') ?? [];
-    if (index >= 0 && index < records.length) {
-      records.removeAt(index);
-      await prefs.setStringList('records', records);
-      setState(() {
-        this.records = records;
-      });
+    Map<String, String> map = {};
+    for (var record in records) {
+      final match = RegExp(r"記録日: (\d{4}-\d{2}-\d{2}) - (.+)").firstMatch(record);
+      if (match != null) {
+        map[match.group(1)!] = match.group(2)!;
+      }
     }
+    setState(() {
+      recordMap = map;
+    });
   }
 
   void _addRecord(String result) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> records = prefs.getStringList('records') ?? [];
     String date = DateTime.now().toIso8601String().split('T')[0];
-    records.add("記録日: $date - $result");
+    recordMap[date] = result;
+    List<String> records = recordMap.entries
+        .map((entry) => "記録日: ${entry.key} - ${entry.value}")
+        .toList();
     await prefs.setStringList('records', records);
-    setState(() {
-      this.records = records;
-    });
+    setState(() {});
+  }
+
+  void _deleteRecordByDate(String date) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    recordMap.remove(date);
+    List<String> records = recordMap.entries
+        .map((entry) => "記録日: ${entry.key} - ${entry.value}")
+        .toList();
+    await prefs.setStringList('records', records);
+    setState(() {});
   }
 
   void _clearRecords() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('records');
     setState(() {
-      records = [];
+      recordMap.clear();
     });
-  }
-
-  void checkScheduledNotifications() async {
-    final List<PendingNotificationRequest> pendingNotifications =
-        await NotificationService().flutterLocalNotificationsPlugin.pendingNotificationRequests();
-
-    print("📅 スケジュール済み通知の数: ${pendingNotifications.length}");
-    for (var notification in pendingNotifications) {
-      print("🔔 ID: ${notification.id}, タイトル: ${notification.title}");
-    }
   }
 
   @override
@@ -106,20 +97,35 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(title: Text("頑張り記録")),
       body: Column(
         children: [
-          Expanded(
-            child: ListView.builder(
-              itemCount: records.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(records[index]),
-                  trailing: IconButton(
-                    icon: Icon(Icons.close),
-                    onPressed: () => _deleteRecord(index),
-                  ),
-                );
-              },
-            ),
+          TableCalendar(
+            firstDay: DateTime.utc(2020, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: focusedDay,
+            calendarFormat: CalendarFormat.month,
+            onDaySelected: (selectedDay, newFocusedDay) {
+              setState(() {
+                focusedDay = newFocusedDay;
+              });
+              String key = selectedDay.toIso8601String().split('T')[0];
+              String? result = recordMap[key];
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: Text("記録"),
+                  content: Text(result != null
+                      ? "$key の記録: $result"
+                      : "$key に記録はありません。"),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text("OK"),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
+          SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -137,7 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          SizedBox(height: 10),
+          SizedBox(height: 20),
         ],
       ),
     );
@@ -166,7 +172,8 @@ class NotificationService {
       onDidReceiveNotificationResponse: (details) {
         final actionId = details.actionId;
 
-        if (details.notificationResponseType == NotificationResponseType.selectedNotificationAction) {
+        if (details.notificationResponseType ==
+            NotificationResponseType.selectedNotificationAction) {
           if (actionId == 'yes_action') {
             _saveRecord('勝ち');
           } else if (actionId == 'no_action') {
@@ -185,7 +192,8 @@ class NotificationService {
 
     if (androidInfo.version.sdkInt >= 31) {
       final permission = await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
           ?.requestExactAlarmsPermission();
 
       if (permission == true) {
@@ -242,17 +250,17 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       actions: [
-      AndroidNotificationAction(
-        'yes_action',
-        'Yes',
-        showsUserInterface: true,
-      ),
-      AndroidNotificationAction(
-        'no_action',
-        'No',
-        showsUserInterface: true,
-      ),
-    ],
+        AndroidNotificationAction(
+          'yes_action',
+          'Yes',
+          showsUserInterface: true,
+        ),
+        AndroidNotificationAction(
+          'no_action',
+          'No',
+          showsUserInterface: true,
+        ),
+      ],
     );
 
     const NotificationDetails details = NotificationDetails(android: androidDetails);

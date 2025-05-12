@@ -38,6 +38,7 @@ dependencies:
   timezone: ^0.10.0
   shared_preferences: ^2.5.3
   device_info_plus: ^9.0.3
+  table_calendar: ^3.0.9
 
 dev_dependencies:
   flutter_test:
