@@ -93,14 +93,83 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _addRecordForDate(String date, String result) async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  recordMap[date] = result;
-  List<String> records = recordMap.entries
-      .map((entry) => "記録日: ${entry.key} - ${entry.value}")
-      .toList();
-  await prefs.setStringList('records', records);
-  setState(() {});
-}
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    recordMap[date] = result;
+    List<String> records = recordMap.entries
+        .map((entry) => "記録日: ${entry.key} - ${entry.value}")
+        .toList();
+    await prefs.setStringList('records', records);
+    setState(() {});
+  }
+
+  Map<String, int> _countWinLossThisMonth() {
+    final int year = focusedDay.year;
+    final int month = focusedDay.month;
+
+    int win = 0;
+    int loss = 0;
+
+    recordMap.forEach((key, value) {
+      final date = DateTime.tryParse(key);
+      if (date != null && date.year == year && date.month == month) {
+        if (value == '勝ち') win++;
+        if (value == '負け') loss++;
+      }
+    });
+
+    return {'勝ち': win, '負け': loss};
+  }
+
+  Widget _monthlyWinLossBarWidget() {
+    final counts = _countWinLossThisMonth();
+    final int win = counts['勝ち']!;
+    final int loss = counts['負け']!;
+    final int total = win + loss;
+
+    if (total == 0) {
+      return Text(
+        "${focusedDay.month}月の記録がありません",
+        style: TextStyle(fontSize: 16),
+      );
+    }
+
+    final double winRatio = win / total;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "${focusedDay.month}月の勝ち負け： 勝ち: $win / 負け: $loss",
+          style: TextStyle(fontSize: 16),
+        ),
+        SizedBox(height: 8),
+        Stack(
+          children: [
+            Container(
+              height: 20,
+              decoration: BoxDecoration(
+                color: Colors.red.shade300,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: winRatio,
+              child: Container(
+                height: 20,
+                decoration: BoxDecoration(
+                  color: Colors.green.shade400,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -109,14 +178,14 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Column(
         children: [
           TableCalendar(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: focusedDay,
-            calendarFormat: CalendarFormat.month,
-            onDaySelected: (selectedDay, newFocusedDay) {
-              setState(() {
-                focusedDay = newFocusedDay;
-              });
+              firstDay: DateTime.utc(2020, 1, 1),
+              lastDay: DateTime.utc(2030, 12, 31),
+              focusedDay: focusedDay,
+              calendarFormat: CalendarFormat.month,
+              onDaySelected: (selectedDay, newFocusedDay) {
+                setState(() {
+                  focusedDay = newFocusedDay;
+                });
 
               String key = selectedDay.toIso8601String().split('T')[0];
               String? result = recordMap[key];
@@ -153,6 +222,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
             },
+            onPageChanged: (newFocusedDay) {
+              setState(() {
+                focusedDay = newFocusedDay;
+              });
+            },
             calendarBuilders: CalendarBuilders(
               defaultBuilder: (context, day, focusedDay) {
                 final dateKey = day.toIso8601String().split('T')[0];
@@ -176,10 +250,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                return null; // 通常通り描画
+                return null;
               },
             ),
           ),
+          SizedBox(height: 20),
+          _monthlyWinLossBarWidget(),
           SizedBox(height: 20),
         ],
       ),
