@@ -32,6 +32,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final NotificationService _notificationService = NotificationService();
   Map<String, String> recordMap = {};
   DateTime focusedDay = DateTime.now();
 
@@ -40,11 +41,11 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadRecords();
 
-    NotificationService().onRecordAdded = (String result) {
+    _notificationService.onRecordAdded = (String result) {
       _addRecord(result);
     };
 
-    NotificationService().scheduleDailyNotification();
+    _notificationService.scheduleDailyNotification();
   }
 
   void _loadRecords() async {
@@ -91,6 +92,16 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _addRecordForDate(String date, String result) async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  recordMap[date] = result;
+  List<String> records = recordMap.entries
+      .map((entry) => "記録日: ${entry.key} - ${entry.value}")
+      .toList();
+  await prefs.setStringList('records', records);
+  setState(() {});
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,8 +117,10 @@ class _HomeScreenState extends State<HomeScreen> {
               setState(() {
                 focusedDay = newFocusedDay;
               });
+
               String key = selectedDay.toIso8601String().split('T')[0];
               String? result = recordMap[key];
+
               showDialog(
                 context: context,
                 builder: (_) => AlertDialog(
@@ -116,6 +129,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? "$key の記録: $result"
                       : "$key に記録はありません。"),
                   actions: [
+                    if (result == null) ...[
+                      TextButton(
+                        onPressed: () async {
+                          await _addRecordForDate(key, "勝ち");
+                          Navigator.pop(context);
+                        },
+                        child: Text("勝ちとして記録"),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await _addRecordForDate(key, "負け");
+                          Navigator.pop(context);
+                        },
+                        child: Text("負けとして記録"),
+                      ),
+                    ],
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: Text("OK"),
@@ -150,25 +179,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 return null; // 通常通り描画
               },
             ),
-          ),
-
-          SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              ElevatedButton(
-                onPressed: () => _addRecord("勝ち"),
-                child: Text("勝ち"),
-              ),
-              ElevatedButton(
-                onPressed: () => _addRecord("負け"),
-                child: Text("負け"),
-              ),
-              ElevatedButton(
-                onPressed: _clearRecords,
-                child: Text("クリア"),
-              ),
-            ],
           ),
           SizedBox(height: 20),
         ],
