@@ -11,7 +11,10 @@ import 'setting.dart';
 const String notificationHourKey = 'notification_hour';
 const String notificationMinuteKey = 'notification_minute';
 
+/// アプリのエントリーポイント。通知サービスを初期化し、アプリを起動する。
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  handleInitialNotificationIfNeeded();
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
   tz.setLocalLocation(tz.getLocation('Asia/Tokyo'));
@@ -21,6 +24,7 @@ void main() async {
   runApp(MyApp());
 }
 
+/// アプリのルートウィジェット。
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -31,18 +35,20 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// ユーザーの頑張り記録を表示・登録するカレンダー画面。
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final NotificationService _notificationService = NotificationService();
   Map<String, String> recordMap = {};
   DateTime focusedDay = DateTime.now();
 
   @override
   void initState() {
+    WidgetsBinding.instance.addObserver(this);
     super.initState();
     _loadRecords();
     _notificationService.onRecordAdded = (String date, String result) {
@@ -51,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _notificationService.scheduleDailyNotification();
   }
 
+  /// SharedPreferencesから記録を読み込む。
   void _loadRecords() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     List<String> records = prefs.getStringList('records') ?? [];
@@ -66,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// 指定日に記録を追加して保存。
   Future<void> _addRecordForDate(String date, String result) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     recordMap[date] = result;
@@ -73,9 +81,11 @@ class _HomeScreenState extends State<HomeScreen> {
         .map((entry) => "記録日: ${entry.key} - ${entry.value}")
         .toList();
     await prefs.setStringList('records', records);
+  print('[静的保存] \$date - \$response を保存完了');
     setState(() {});
   }
 
+  /// 表示中の月の勝ち負け数をカウント。
   Map<String, int> _countWinLossThisMonth() {
     final int year = focusedDay.year;
     final int month = focusedDay.month;
@@ -91,6 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return {'勝ち': win, '負け': loss};
   }
 
+  /// 勝ち負けの割合バーを表示するウィジェット。
   Widget _monthlyWinLossBarWidget() {
     final counts = _countWinLossThisMonth();
     final int win = counts['勝ち']!;
@@ -194,6 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+/// 通知を管理するサービス。通知のスケジューリングや応答処理を担当。
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -202,23 +214,25 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
   void Function(String date, String result)? onRecordAdded;
 
+  /// 通知プラグインを初期化し、通知をスケジュール。アラーム権限も確認。
   Future<void> init() async {
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     final initSettings = InitializationSettings(android: androidInit);
     await flutterLocalNotificationsPlugin.initialize(
       initSettings,
       onDidReceiveNotificationResponse: _handleNotificationResponse,
-      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-    );
+          );
     scheduleDailyNotification();
     await requestExactAlarmPermission();
   }
 
+  /// 通知を再スケジュール。
   Future<void> rescheduleNotification() async {
     await flutterLocalNotificationsPlugin.cancelAll();
     await scheduleDailyNotification();
   }
 
+  /// 通知の応答を処理。
   void _handleNotificationResponse(NotificationResponse details) {
     final actionId = details.actionId;
     if (details.notificationResponseType == NotificationResponseType.selectedNotificationAction) {
@@ -230,6 +244,7 @@ class NotificationService {
     }
   }
 
+  /// 正確なアラーム権限をリクエスト（Android 12以降）。
   Future<void> requestExactAlarmPermission() async {
     final androidInfo = await DeviceInfoPlugin().androidInfo;
     if (androidInfo.version.sdkInt >= 31) {
@@ -238,6 +253,7 @@ class NotificationService {
     }
   }
 
+  /// 通知に使用するメッセージをランダムに取得。
   String getRandomMessage() {
     final messages = [
       '今日、やるべきことに取り組めた？',
@@ -255,6 +271,7 @@ class NotificationService {
     return messages.first;
   }
 
+  /// 毎日指定時刻に通知をスケジュール。
   Future<void> scheduleDailyNotification() async {
     final prefs = await SharedPreferences.getInstance();
     final hour = prefs.getInt(notificationHourKey) ?? 23;
@@ -289,6 +306,7 @@ class NotificationService {
     }
   }
 
+  /// 勝ち負け記録を保存し、コールバックを呼び出す。
   void _saveRecord(String response) async {
     final prefs = await SharedPreferences.getInstance();
     List<String> records = prefs.getStringList('records') ?? [];
@@ -300,20 +318,27 @@ class NotificationService {
   }
 }
 
-@pragma('vm:entry-point')
-void notificationTapBackground(NotificationResponse details) async {
-  final actionId = details.actionId;
-  if (details.notificationResponseType == NotificationResponseType.selectedNotificationAction) {
+/// バックグラウンドで通知の応答を処理する関数。
+// 通知タップ時にアプリが起動されたら通知内容を処理する
+void handleInitialNotificationIfNeeded() async {
+  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  final NotificationAppLaunchDetails? launchDetails =
+      await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+
+  if (launchDetails?.didNotificationLaunchApp ?? false) {
+    final String? actionId = launchDetails!.notificationResponse?.actionId;
     if (actionId == 'yes_action') {
-      await _saveRecordStatic('勝ち');
+      NotificationService()._saveRecord('勝ち');
     } else if (actionId == 'no_action') {
-      await _saveRecordStatic('負け');
+      NotificationService()._saveRecord('負け');
     }
   }
 }
 
+/// バックグラウンドでの記録保存用の静的関数。
 @pragma('vm:entry-point')
 Future<void> _saveRecordStatic(String response) async {
+  print('[静的保存] 保存開始');
   final prefs = await SharedPreferences.getInstance();
   List<String> records = prefs.getStringList('records') ?? [];
   final date = DateTime.now().toIso8601String().split('T')[0];
